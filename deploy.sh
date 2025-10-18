@@ -2,6 +2,57 @@
 set -euo pipefail
 
 NS=devops-demo
+CLUSTER_NAME=devops
+
+# Check and create Kind cluster if needed
+ensure_kind_cluster() {
+  echo "Checking for Kubernetes cluster..."
+  
+  # Check if kubectl can connect to any cluster
+  if ! kubectl cluster-info >/dev/null 2>&1; then
+    echo "No active Kubernetes cluster found."
+    
+    # Check if kind is installed
+    if ! command -v kind >/dev/null 2>&1; then
+      echo "❌ Error: 'kind' is not installed."
+      echo "Please install kind: https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
+      exit 1
+    fi
+    
+    # Create new kind cluster
+    echo "Creating Kind cluster '${CLUSTER_NAME}'..."
+    cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+EOF
+    echo "✅ Kind cluster '${CLUSTER_NAME}' created successfully!"
+  else
+    # Cluster exists, check if it's a kind cluster
+    local ctx
+    ctx=$(kubectl config current-context 2>/dev/null || echo "")
+    if [[ ${ctx} == kind-* ]]; then
+      CLUSTER_NAME="${ctx#kind-}"
+      echo "✅ Using existing Kind cluster: ${CLUSTER_NAME}"
+    else
+      echo "✅ Using existing cluster: ${ctx}"
+    fi
+  fi
+}
 
 # Ensure an ingress controller exists and is ready (kind/minikube helpers)
 ensure_ingress_controller() {
@@ -74,6 +125,9 @@ if command -v minikube >/dev/null 2>&1; then
   eval $(minikube -p minikube docker-env)
 fi
 
+# Ensure Kind cluster exists before proceeding
+ensure_kind_cluster
+
 echo "Building images..."
 docker build -t backend:latest ./backend
 docker build -t frontend:latest ./frontend
@@ -122,6 +176,66 @@ apply_ingress_with_retry || true
 echo "Waiting for rollout..."
 kubectl -n ${NS} rollout status deploy/backend --timeout=180s || true
 kubectl -n ${NS} rollout status deploy/frontend --timeout=180s || true
+
+# Add devops.local to /etc/hosts if not already present
+add_hosts_entry() {
+  local hostname="devops.local"
+  local ip="127.0.0.1"
+  
+  if ! grep -q "${hostname}" /etc/hosts 2>/dev/null; then
+    echo "Adding ${hostname} to /etc/hosts..."
+    if [ -w /etc/hosts ]; then
+      echo "${ip} ${hostname}" >> /etc/hosts
+      echo "✅ Added ${hostname} to /etc/hosts"
+    else
+      echo "⚠️  Please add this line to /etc/hosts manually (requires sudo):"
+      echo "   ${ip} ${hostname}"
+      echo ""
+      echo "Run: echo '${ip} ${hostname}' | sudo tee -a /etc/hosts"
+    fi
+  else
+    echo "✅ ${hostname} already exists in /etc/hosts"
+  fi
+}
+
+add_hosts_entry
+
+echo ""
+echo "============================================"
+echo "✅ DEPLOYMENT SUCCESSFUL!"
+echo "============================================"
+echo ""
+echo "📋 Cluster Information:"
+kubectl cluster-info
+echo ""
+echo "📦 Deployed Resources:"
+kubectl -n ${NS} get all
+echo ""
+echo "🌐 Ingress Status:"
+kubectl -n ${NS} get ingress
+echo ""
+echo "============================================"
+echo "🚀 ACCESS YOUR APPLICATION:"
+echo "============================================"
+echo "   URL: http://devops.local"
+echo ""
+echo "💡 If using Kind (current setup):"
+echo "   - Ports 80/443 are already mapped"
+echo "   - Just open: http://devops.local"
+echo ""
+echo "💡 If using Minikube:"
+echo "   - Run: minikube tunnel"
+echo "   - Then open: http://devops.local"
+echo ""
+echo "🎨 Features Available:"
+echo "   ✨ Real-time Kubernetes Dashboard"
+echo "   💬 Live Chat with 10+ features"
+echo "   🎭 3 Themes: Light, Dark, Cyberpunk"
+echo "   📊 Pod Logs Viewer"
+echo "   🔄 Deployment Scaling"
+echo "   📈 Resource Monitoring"
+echo ""
+echo "============================================"
 
 cat <<EOF
 Done.

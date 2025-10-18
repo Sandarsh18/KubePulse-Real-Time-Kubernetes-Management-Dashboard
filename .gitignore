@@ -1,4 +1,36 @@
-node_modules
+# Dependencies
+node_modules/
+**/node_modules/
+
+# IDE
 .DS_Store
-.vscode
-**/node_modules
+.vscode/
+.idea/
+
+# Build outputs
+**/dist/
+**/build/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.old.md
+README.old.md
+
+# Temporary/unnecessary files
+Detailed.md
+verify.sh
+scripts/
+
+# Docker
+.dockerignore
