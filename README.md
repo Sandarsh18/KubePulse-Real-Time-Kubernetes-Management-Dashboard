@@ -239,17 +239,6 @@ socket.on('logs:error', (err) => { /* error info */ })
 
 ---
 
-## 📸 Screenshots & Diagrams
-
-High-level architecture
-
-![Architecture](architecture-diagram.png)
-
-Frontend app structure
-
-![Frontend Architecture](frontend/architecture-diagram.png)
-
----
 
 ## 🧭 Detailed Flows
 
