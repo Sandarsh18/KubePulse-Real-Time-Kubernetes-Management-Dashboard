@@ -18,39 +18,33 @@
 
 ```mermaid
 graph TB
-    subgraph Browser["🌐 User Browser"]
+    subgraph Browser["User Browser"]
         A[React + TailwindCSS]
     end
-    
-    subgraph Ingress["🔷 NGINX Ingress"]
-        B[devops.local:80/443]
+
+    subgraph Ingress["NGINX Ingress (devops.local)"]
+        B[Ingress]
     end
-    
-    subgraph Frontend["🎨 Frontend Service"]
-        C[NGINX Static Files<br/>React Dashboard<br/>TailwindCSS<br/>3 Themes]
+
+    subgraph Frontend["Frontend Service"]
+        C[NGINX static files]
     end
-    
-    subgraph Backend["⚙️ Backend Service"]
-        D[Node.js + Express<br/>REST API<br/>Socket.IO Server<br/>Kubernetes Client]
+
+    subgraph Backend["Backend Service"]
+        D[Node.js + Express + Socket.IO]
     end
-    
-    subgraph Storage["📦 Data Layer"]
-        E[Redis Pub/Sub<br/>Chat Messages<br/>Online Users]
-        F[Kubernetes API<br/>Pods & Deployments<br/>Events & Logs]
+
+    subgraph Data["Data & APIs"]
+        E[Redis (chat)]
+        F[Kubernetes API]
     end
-    
+
     A -->|HTTP/REST| B
     A -->|WebSocket| B
     B --> C
     B --> D
     D --> E
     D --> F
-    
-    style Browser fill:#e3f2fd
-    style Ingress fill:#fff3e0
-    style Frontend fill:#f3e5f5
-    style Backend fill:#e8f5e9
-    style Storage fill:#fce4ec
 ```
 
 ---
@@ -124,24 +118,14 @@ graph TB
 
 ```mermaid
 graph LR
-    A[🎬 Start<br/>./deploy.sh] --> B[🔍 Check<br/>Prerequisites]
-    B --> C[🏗️ Create Kind<br/>Cluster]
-    C --> D[🐳 Build Docker<br/>Images]
-    D --> E[📦 Load Images<br/>into Kind]
-    E --> F[🔌 Install NGINX<br/>Ingress]
-    F --> G[☸️ Deploy K8s<br/>Resources]
-    G --> H[⏳ Wait for<br/>Rollout]
-    H --> I[✅ Complete!<br/>http://devops.local]
-    
-    style A fill:#e3f2fd
-    style B fill:#fff3e0
-    style C fill:#f3e5f5
-    style D fill:#e8f5e9
-    style E fill:#fce4ec
-    style F fill:#e0f2f1
-    style G fill:#fff9c4
-    style H fill:#f8bbd0
-    style I fill:#c8e6c9
+    A[Start: ./deploy.sh] --> B[Check prerequisites]
+    B --> C[Create Kind cluster]
+    C --> D[Build Docker images]
+    D --> E[Load images into Kind]
+    E --> F[Install Ingress NGINX]
+    F --> G[Apply Kubernetes manifests]
+    G --> H[Wait for rollout]
+    H --> I[Open http://devops.local]
 ```
 
 Notes
@@ -245,10 +229,10 @@ socket.on('logs:error', (err) => { /* error info */ })
 ### 🔐 Authentication Flow (JWT)
 ```mermaid
 sequenceDiagram
-    participant U as 👤 User
-    participant FE as 🎨 Frontend
-    participant BE as ⚙️ Backend
-    participant DB as 🗄️ MongoDB
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant DB as MongoDB
 
     U->>FE: Submit email/password
     FE->>BE: POST /api/auth/login
@@ -257,34 +241,34 @@ sequenceDiagram
     BE-->>FE: { token, user }
     FE->>BE: GET /api/auth/me (with token)
     BE-->>FE: { user }
-    FE-->>U: Logged in ✅ (Admin panel enabled if role=admin)
+    FE-->>U: Logged in (admin panel if role=admin)
 ```
 
 ### 📜 Pod Logs Streaming (Resilient Switching)
 ```mermaid
 sequenceDiagram
-    participant FE as 🎨 Frontend
-    participant WS as 🔌 Socket.IO
-    participant BE as ⚙️ Backend
-    participant K8s as ☸️ K8s API
+    participant FE as Frontend
+    participant WS as SocketIO
+    participant BE as Backend
+    participant K8s as Kubernetes API
 
     FE->>WS: streamLogs { ns, pod, container }
     WS->>BE: subscribe(id)
     BE->>K8s: stream pod logs
     K8s-->>BE: log lines
     BE-->>WS: logs:line
-    WS-->>FE: logs:line (UI append)
-    Note over FE,BE: On switch: end previous stream, suppress transient errors
+    WS-->>FE: logs:line (append)
+    Note over FE,BE: On switch: end previous stream; suppress transient errors
 ```
 
 ### ⚖️ Scaling (with Fallbacks)
 ```mermaid
 sequenceDiagram
-    participant FE as 🎨 Frontend
-    participant BE as ⚙️ Backend
-    participant K8s as ☸️ K8s API
+    participant FE as Frontend
+    participant BE as Backend
+    participant K8s as Kubernetes API
 
-    FE->>BE: POST /api/k8s/scale {ns,name,replicas}
+    FE->>BE: POST /api/k8s/scale { ns, name, replicas }
     BE->>K8s: PATCH deployment/scale (merge-patch)
     alt NotFound
       BE->>K8s: PATCH statefulset/scale
