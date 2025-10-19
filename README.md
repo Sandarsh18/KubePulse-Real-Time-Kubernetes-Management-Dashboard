@@ -241,17 +241,13 @@ socket.on('logs:error', (err) => { /* error info */ })
 
 ## 📸 Screenshots & Diagrams
 
-<div align="center">
+High-level architecture
 
-> High-level architecture
+![Architecture](architecture-diagram.png)
 
-<img alt="Architecture" src="./architecture-diagram.png" width="720" />
+Frontend app structure
 
-> Frontend app structure
-
-<img alt="Frontend Architecture" src="./frontend/architecture-diagram.png" width="720" />
-
-</div>
+![Frontend Architecture](frontend/architecture-diagram.png)
 
 ---
 
