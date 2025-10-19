@@ -65,26 +65,82 @@ router.get('/deployments', async (req, res) => {
 router.post('/scale', async (req, res) => {
   const ok = ensureClientOrDemo(res)
   if (ok === false) return
-  const { ns='devops-demo', name, replicas } = req.body
+  const { ns = 'devops-demo', name } = req.body
+  let { replicas } = req.body
+  replicas = Number(replicas)
+
   console.log(`[SCALE] Request received: ns=${ns}, name=${name}, replicas=${replicas}`)
-  if (!name || replicas === undefined) return res.status(400).json({error:'name and replicas required'})
+  if (!name || Number.isNaN(replicas)) {
+    return res.status(400).json({ error: 'name and numeric replicas are required' })
+  }
+  if (replicas < 0) {
+    return res.status(400).json({ error: 'replicas cannot be negative' })
+  }
   if (ok === 'demo') return res.json({ status: 'scaled', name, ns, replicas })
+
+  const patchHeaders = { headers: { 'Content-Type': 'application/merge-patch+json' } }
+  const scaleBody = { spec: { replicas } }
+
+  // Helper to try patching a specific workload kind
+  async function tryPatch(kind) {
+    switch (kind) {
+      case 'deployment':
+        return k8sApps.patchNamespacedDeploymentScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
+      case 'statefulset':
+        return k8sApps.patchNamespacedStatefulSetScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
+      case 'replicaset':
+        return k8sApps.patchNamespacedReplicaSetScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
+      default:
+        throw new Error(`Unsupported kind: ${kind}`)
+    }
+  }
+
   try {
-    // First, read the current scale
-    console.log(`[SCALE] Reading current scale for ${name} in namespace ${ns}`)
-    const { body: currentScale } = await k8sApps.readNamespacedDeploymentScale(name, ns)
-    
-    // Update the replicas
-    currentScale.spec.replicas = replicas
-    
-    // Replace the scale
-    console.log(`[SCALE] Updating deployment ${name} in namespace ${ns} to ${replicas} replicas`)
-    const { body } = await k8sApps.replaceNamespacedDeploymentScale(name, ns, currentScale)
-    console.log(`[SCALE] Success! Deployment ${name} scaled to ${replicas} replicas`)
-    res.json(body)
+    // Prefer Deployment; if not found (404), try other common kinds
+    try {
+      console.log(`[SCALE] Patching Deployment ${name} in ${ns} to ${replicas}`)
+      const { body } = await tryPatch('deployment')
+      console.log(`[SCALE] Success (Deployment) ${name} -> ${replicas}`)
+      return res.json(body)
+    } catch (e) {
+      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
+      const msg = e?.body?.message || e?.message
+      console.warn(`[SCALE] Deployment patch failed (${code}): ${msg}`)
+      if (code !== 404) throw e
+    }
+
+    // Fallbacks
+    try {
+      console.log(`[SCALE] Trying StatefulSet ${name} in ${ns}`)
+      const { body } = await tryPatch('statefulset')
+      console.log(`[SCALE] Success (StatefulSet) ${name} -> ${replicas}`)
+      return res.json(body)
+    } catch (e) {
+      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
+      const msg = e?.body?.message || e?.message
+      console.warn(`[SCALE] StatefulSet patch failed (${code}): ${msg}`)
+      if (code !== 404) throw e
+    }
+
+    try {
+      console.log(`[SCALE] Trying ReplicaSet ${name} in ${ns}`)
+      const { body } = await tryPatch('replicaset')
+      console.log(`[SCALE] Success (ReplicaSet) ${name} -> ${replicas}`)
+      return res.json(body)
+    } catch (e) {
+      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
+      const msg = e?.body?.message || e?.message
+      console.warn(`[SCALE] ReplicaSet patch failed (${code}): ${msg}`)
+      if (code === 404) {
+        return res.status(404).json({ error: `Workload ${name} not found in namespace ${ns}` })
+      }
+      throw e
+    }
   } catch (e) {
-    console.error(`[SCALE] Error scaling ${name}:`, e.message, e.body?.message || '')
-    res.status(500).json({ error: e.body?.message || e.message })
+    const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
+    const msg = e?.body?.message || e?.message
+    console.error(`[SCALE] Error scaling ${name}:`, code, msg)
+    return res.status(code && Number.isInteger(code) ? code : 500).json({ error: msg || 'Failed to scale workload' })
   }
 })
 

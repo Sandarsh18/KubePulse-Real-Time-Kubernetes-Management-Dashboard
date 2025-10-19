@@ -4,6 +4,9 @@ WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
 RUN npm install --legacy-peer-deps || yarn install || pnpm install
 COPY . .
+# Use .env-provided VITE_API_URL (or override via build-arg). Do not hard-code /api here.
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build || yarn build || pnpm build
 
 FROM nginx:alpine

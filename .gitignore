@@ -28,9 +28,7 @@ Thumbs.db
 README.old.md
 
 # Temporary/unnecessary files
-Detailed.md
 verify.sh
-scripts/
 
 # Docker
 .dockerignore

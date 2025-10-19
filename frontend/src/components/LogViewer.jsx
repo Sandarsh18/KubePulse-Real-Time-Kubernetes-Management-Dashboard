@@ -2,12 +2,22 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import { useTheme } from '../context/ThemeContext'
 
+let sharedSocket = null
+function getSocket() {
+  if (!sharedSocket) {
+    sharedSocket = io('/logs', { path: '/socket.io', transports: ['websocket', 'polling'] })
+  }
+  return sharedSocket
+}
+
 export default function LogViewer({ ns, pod, container }) {
   const [lines, setLines] = useState([])
   const [autoScroll, setAutoScroll] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
   const bottomRef = useRef(null)
   const containerRef = useRef(null)
+  const graceTimerRef = useRef(null)
+  const subIdRef = useRef(0)
   const { theme } = useTheme()
 
   useEffect(() => {
@@ -16,33 +26,47 @@ export default function LogViewer({ ns, pod, container }) {
       setIsInitialLoad(true)
       return
     }
-    
-    // Set initial load to true when pod changes
+
+    // Clear existing logs and mark initial load
     setIsInitialLoad(true)
-    setLines([]) // Clear old logs
-    
-    const logSocket = io('/logs', { path: '/socket.io' })
-    logSocket.emit('subscribe', { ns, pod, container })
-    
-    let firstBatchReceived = false
-    
-    logSocket.on('log', (l) => {
+    setLines([])
+
+    const id = ++subIdRef.current
+    const s = getSocket()
+
+    // Grace period to avoid flashing transient errors while switching
+    if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+    let graceOver = false
+    graceTimerRef.current = setTimeout(() => { graceOver = true }, 700)
+
+    s.emit('subscribe', { ns, pod, container })
+
+    let firstBatch = false
+    const onLog = (l) => {
+      if (subIdRef.current !== id) return
       setLines(prev => {
-        const newLines = [...prev, l].slice(-500)
-        // After first batch of logs, mark as loaded
-        if (!firstBatchReceived && newLines.length > 0) {
-          firstBatchReceived = true
-          // Delay to prevent auto-scroll on initial load
-          setTimeout(() => setIsInitialLoad(false), 500)
+        const next = [...prev, l].slice(-500)
+        if (!firstBatch && next.length > 0) {
+          firstBatch = true
+          setTimeout(() => setIsInitialLoad(false), 300)
         }
-        return newLines
+        return next
       })
-    })
-    
-    logSocket.on('error', (e) => setLines(prev => [...prev, `ERROR: ${e}`].slice(-500)))
-    
-    return () => { 
-      logSocket.disconnect()
+    }
+    const onError = (e) => {
+      if (subIdRef.current !== id) return
+      const msg = String(e || '')
+      // Ignore typical transport abort on switch during grace period
+      if (!graceOver && /HTTP request failed|aborted|socket hang up|The operation was aborted/i.test(msg)) return
+      setLines(prev => [...prev, `ERROR: ${msg}`].slice(-500))
+    }
+
+    s.on('log', onLog)
+    s.on('error', onError)
+
+    return () => {
+      s.off('log', onLog)
+      s.off('error', onError)
     }
   }, [ns, pod, container])
 

@@ -14,6 +14,11 @@ export default function Logs() {
     window.scrollTo(0, 0)
   }, [])
 
+  // Reset selected pod whenever namespace changes to avoid stale selections
+  useEffect(() => {
+    setPod(null)
+  }, [ns])
+
   return (
     <div className={`min-h-screen ${theme.bg} transition-all duration-500 p-6`}>
       <div className="max-w-[95vw] mx-auto">
