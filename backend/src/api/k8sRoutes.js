@@ -78,69 +78,68 @@ router.post('/scale', async (req, res) => {
   }
   if (ok === 'demo') return res.json({ status: 'scaled', name, ns, replicas })
 
-  const patchHeaders = { headers: { 'Content-Type': 'application/merge-patch+json' } }
-  const scaleBody = { spec: { replicas } }
-
-  // Helper to try patching a specific workload kind
-  async function tryPatch(kind) {
-    switch (kind) {
-      case 'deployment':
-        return k8sApps.patchNamespacedDeploymentScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
-      case 'statefulset':
-        return k8sApps.patchNamespacedStatefulSetScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
-      case 'replicaset':
-        return k8sApps.patchNamespacedReplicaSetScale(name, ns, scaleBody, undefined, undefined, undefined, undefined, patchHeaders)
-      default:
-        throw new Error(`Unsupported kind: ${kind}`)
+  // Helper to scale using READ then REPLACE method (works around 415 errors)
+  async function scaleWithReplace(readFn, replaceFn, kind) {
+    try {
+      console.log(`[SCALE] Reading current ${kind} scale ${ns}/${name}`)
+      const { body: currentScale } = await readFn(name, ns)
+      
+      // Update replicas in the scale object
+      currentScale.spec.replicas = replicas
+      
+      console.log(`[SCALE] Replacing ${kind} scale ${ns}/${name} with ${replicas} replicas`)
+      await replaceFn(name, ns, currentScale)
+      
+      console.log(`✅ Scaled ${kind} ${ns}/${name} to ${replicas}`)
+      return { status: 'scaled', name, ns, replicas, kind }
+    } catch (err) {
+      if (err.statusCode === 404) {
+        throw err // Resource doesn't exist, try next kind
+      }
+      console.error(`[SCALE] ${kind} error (${err.statusCode}):`, err.body?.message || err.message)
+      throw err
     }
   }
 
   try {
-    // Prefer Deployment; if not found (404), try other common kinds
-    try {
-      console.log(`[SCALE] Patching Deployment ${name} in ${ns} to ${replicas}`)
-      const { body } = await tryPatch('deployment')
-      console.log(`[SCALE] Success (Deployment) ${name} -> ${replicas}`)
-      return res.json(body)
-    } catch (e) {
-      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
-      const msg = e?.body?.message || e?.message
-      console.warn(`[SCALE] Deployment patch failed (${code}): ${msg}`)
-      if (code !== 404) throw e
+    const result = await scaleWithReplace(
+      (n, ns) => k8sApps.readNamespacedDeploymentScale(n, ns),
+      (n, ns, body) => k8sApps.replaceNamespacedDeploymentScale(n, ns, body),
+      'Deployment'
+    )
+    return res.json(result)
+  } catch (err) {
+    if (err.statusCode !== 404) {
+      console.log(`[SCALE] Not a Deployment: ${err.body?.message || err.message}`)
     }
+  }
 
-    // Fallbacks
-    try {
-      console.log(`[SCALE] Trying StatefulSet ${name} in ${ns}`)
-      const { body } = await tryPatch('statefulset')
-      console.log(`[SCALE] Success (StatefulSet) ${name} -> ${replicas}`)
-      return res.json(body)
-    } catch (e) {
-      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
-      const msg = e?.body?.message || e?.message
-      console.warn(`[SCALE] StatefulSet patch failed (${code}): ${msg}`)
-      if (code !== 404) throw e
+  try {
+    const result = await scaleWithReplace(
+      (n, ns) => k8sApps.readNamespacedStatefulSetScale(n, ns),
+      (n, ns, body) => k8sApps.replaceNamespacedStatefulSetScale(n, ns, body),
+      'StatefulSet'
+    )
+    return res.json(result)
+  } catch (err) {
+    if (err.statusCode !== 404) {
+      console.log(`[SCALE] Not a StatefulSet: ${err.body?.message || err.message}`)
     }
+  }
 
-    try {
-      console.log(`[SCALE] Trying ReplicaSet ${name} in ${ns}`)
-      const { body } = await tryPatch('replicaset')
-      console.log(`[SCALE] Success (ReplicaSet) ${name} -> ${replicas}`)
-      return res.json(body)
-    } catch (e) {
-      const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
-      const msg = e?.body?.message || e?.message
-      console.warn(`[SCALE] ReplicaSet patch failed (${code}): ${msg}`)
-      if (code === 404) {
-        return res.status(404).json({ error: `Workload ${name} not found in namespace ${ns}` })
-      }
-      throw e
-    }
-  } catch (e) {
-    const code = e?.response?.statusCode || e?.statusCode || e?.response?.status
-    const msg = e?.body?.message || e?.message
-    console.error(`[SCALE] Error scaling ${name}:`, code, msg)
-    return res.status(code && Number.isInteger(code) ? code : 500).json({ error: msg || 'Failed to scale workload' })
+  try {
+    const result = await scaleWithReplace(
+      (n, ns) => k8sApps.readNamespacedReplicaSetScale(n, ns),
+      (n, ns, body) => k8sApps.replaceNamespacedReplicaSetScale(n, ns, body),
+      'ReplicaSet'
+    )
+    return res.json(result)
+  } catch (err) {
+    console.error(`[SCALE] Failed to scale ${ns}/${name}:`, err.body || err.message)
+    return res.status(500).json({ 
+      error: 'Resource not found or cannot be scaled', 
+      details: err.body?.message || err.message 
+    })
   }
 })
 

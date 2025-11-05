@@ -1,17 +1,32 @@
-# frontend Dockerfile
-FROM node:20-alpine AS build
+# Multi-stage build for Vite app (npm/yarn/pnpm supported)
+
+FROM node:22-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
-RUN npm install --legacy-peer-deps || yarn install || pnpm install
-COPY . .
-# Use .env-provided VITE_API_URL (or override via build-arg). Do not hard-code /api here.
+
+# Build-time env for Vite
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
-RUN npm run build || yarn build || pnpm build
 
+# Copy package files
+COPY package*.json ./
+
+# Enable corepack and install with yarn
+RUN corepack enable && yarn install
+
+# Copy source
+COPY . .
+
+# Build
+RUN yarn build
+
+# Production image
 FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-# Use nginx-cluster.conf for in-cluster deployment (proxies to backend service)
-COPY nginx-cluster.conf /etc/nginx/conf.d/default.conf
+
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy built app
+COPY --from=builder /app/dist /usr/share/nginx/html
+
 EXPOSE 80
-CMD ["nginx","-g","daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]

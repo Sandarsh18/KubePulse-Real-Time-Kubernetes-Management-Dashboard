@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-###############################################################################
+##############################################################################
 # KubePulse Complete Deployment Script
-# 
+#
 # This script deploys EVERYTHING:
 # - Kubernetes cluster (Kind)
 # - MongoDB (for Authentication)
@@ -137,7 +137,6 @@ check_prerequisites() {
 ensure_kind_cluster() {
   print_header "Step 2: Setting Up Kubernetes Cluster"
   
-  # Check if kubectl can connect to any cluster
   if ! kubectl cluster-info >/dev/null 2>&1; then
     print_info "No active Kubernetes cluster found. Creating new Kind cluster..."
     
@@ -175,7 +174,6 @@ EOF
     fi
   fi
   
-  # Verify cluster is ready
   print_step "Waiting for cluster to be ready..."
   kubectl wait --for=condition=Ready nodes --all --timeout=60s
   print_success "Cluster is ready!"
@@ -187,6 +185,9 @@ EOF
 
 deploy_mongodb() {
   print_header "Step 3: Deploying MongoDB (Authentication Database)"
+  
+  print_step "Ensuring namespace exists..."
+  kubectl apply -f k8s/namespace.yaml 2>/dev/null || kubectl create namespace ${NS}
   
   print_step "Creating MongoDB deployment..."
   
@@ -222,12 +223,26 @@ spec:
     spec:
       containers:
       - name: mongodb
-        image: mongo:latest
+        image: mongo:7.0
+        imagePullPolicy: IfNotPresent
+        args: ["--bind_ip_all"]
         ports:
         - containerPort: 27017
         env:
         - name: MONGO_INITDB_DATABASE
           value: kubepulse
+        readinessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          tcpSocket:
+            port: 27017
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 6
         volumeMounts:
         - name: mongo-data
           mountPath: /data/db
@@ -237,14 +252,21 @@ spec:
 EOF
   
   print_step "Waiting for MongoDB to be ready..."
-  kubectl -n ${NS} rollout status deployment/mongodb --timeout=120s
+  if ! kubectl -n ${NS} rollout status deployment/mongodb --timeout=300s; then
+    print_warning "MongoDB did not become ready in time. Collecting diagnostics..."
+    kubectl -n ${NS} get pods -l app=mongodb -o wide || true
+    kubectl -n ${NS} describe pod -l app=mongodb || true
+    kubectl -n ${NS} logs deploy/mongodb --tail=200 || true
+    exit 1
+  fi
   print_success "MongoDB is ready!"
   
   # Get MongoDB connection string
-  local mongo_ip
+  local mongo_ip node_port
   mongo_ip=$(kubectl -n ${NS} get svc mongodb -o jsonpath='{.spec.clusterIP}')
+  node_port=$(kubectl -n ${NS} get svc mongodb -o jsonpath='{.spec.ports[0].nodePort}')
   print_info "MongoDB available at: mongodb://${mongo_ip}:27017/kubepulse"
-  print_info "MongoDB NodePort accessible at: localhost:${MONGO_PORT}"
+  print_info "MongoDB NodePort: ${node_port} (Kind hostPort 27017 mapped)"
 }
 
 ###############################################################################
@@ -375,7 +397,11 @@ build_images() {
   print_success "Backend image built"
   
   print_step "Building frontend image..."
-  docker build -t frontend:latest ./frontend --quiet
+  # Read build-time API URL from frontend/.env (fallback to http://devops.local)
+  local FRONT_URL
+  FRONT_URL=$(grep -E '^VITE_API_URL=' frontend/.env | cut -d= -f2- || true)
+  FRONT_URL=${FRONT_URL:-http://devops.local}
+  docker build --network host --build-arg VITE_API_URL="${FRONT_URL}" -t frontend:latest ./frontend --quiet
   print_success "Frontend image built"
 }
 
@@ -406,8 +432,8 @@ load_images_into_kind() {
     print_success "Redis image loaded"
     
     print_step "Preloading MongoDB image..."
-    docker pull -q mongo:latest || true
-    kind load docker-image mongo:latest --name "$cluster_name"
+    docker pull -q mongo:7.0 || true
+    kind load docker-image mongo:7.0 --name "$cluster_name"
     print_success "MongoDB image loaded"
   else
     print_info "Not a Kind cluster, skipping image loading"
@@ -425,52 +451,25 @@ ensure_ingress_controller() {
   ctx=$(kubectl config current-context 2>/dev/null || echo "")
   
   if [[ ${ctx} == kind-* ]]; then
-    # Preload ingress images
     print_step "Preloading ingress controller images..."
     local controllerImg="registry.k8s.io/ingress-nginx/controller:v1.11.1"
     local certgenImg="registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.4.1"
-    
     docker pull -q "$controllerImg" || true
     docker pull -q "$certgenImg" || true
     kind load docker-image "$controllerImg" --name "${ctx#kind-}" || true
     kind load docker-image "$certgenImg" --name "${ctx#kind-}" || true
-    
-    if ! kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
-      print_step "Installing ingress-nginx controller..."
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/kind/deploy.yaml
-      print_success "Ingress controller installed"
-    else
-      print_info "Ingress controller already installed"
-    fi
-    
-    # Label node
-    local node
-    node=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
-    if [[ -n "$node" ]]; then
-      kubectl label node "$node" ingress-ready=true --overwrite >/dev/null 2>&1 || true
-    fi
-    
-    # Patch deployment
-    print_step "Configuring ingress controller..."
-    kubectl -n ingress-nginx set image deploy/ingress-nginx-controller controller=${controllerImg} --record >/dev/null 2>&1 || true
-    kubectl -n ingress-nginx patch deployment ingress-nginx-controller \
-      --type='json' \
-      -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null 2>&1 || true
-    
-    print_step "Waiting for ingress controller to be ready..."
-    kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=300s || true
-    
-    # Wait for webhook
-    print_step "Waiting for admission webhook..."
-    for i in {1..30}; do
-      if kubectl get validatingwebhookconfigurations.admissionregistration.k8s.io ingress-nginx-admission >/dev/null 2>&1; then
-        break
-      fi
-      sleep 2
-    done
-    
-    print_success "Ingress controller is ready!"
   fi
+
+  if ! kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+    print_step "Installing ingress-nginx..."
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.1/deploy/static/provider/kind/deploy.yaml
+  else
+    print_info "Ingress controller already installed"
+  fi
+
+  print_step "Waiting for ingress controller to be ready..."
+  kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=180s
+  print_success "Ingress controller is ready!"
 }
 
 ###############################################################################
@@ -634,7 +633,7 @@ echo ""
 # Check if MongoDB is running
 if ! docker ps | grep -q kubepulse-mongo; then
   echo "Starting MongoDB..."
-  docker run -d --name kubepulse-mongo -p 27017:27017 mongo:latest
+  docker run -d --name kubepulse-mongo -p 27017:27017 mongo:7.0
   sleep 3
 fi
 
@@ -676,7 +675,7 @@ echo ""
 echo "🛑 To stop: kill $BACKEND_PID $FRONTEND_PID"
 echo ""
 EOF
-  
+
   chmod +x start-dev.sh
   print_success "Created start-dev.sh"
   
@@ -693,7 +692,7 @@ lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 
 echo "✅ Development servers stopped"
 EOF
-  
+
   chmod +x stop-dev.sh
   print_success "Created stop-dev.sh"
   
@@ -845,8 +844,8 @@ EOF
   build_images
   load_images_into_kind
   ensure_ingress_controller
-  deploy_kubernetes_resources
-  deploy_mongodb
+  deploy_kubernetes_resources  # This creates the namespace first
+  deploy_mongodb                # Now MongoDB can be deployed
   update_hosts_file
   sleep 5  # Wait for MongoDB to be ready
   create_admin_user

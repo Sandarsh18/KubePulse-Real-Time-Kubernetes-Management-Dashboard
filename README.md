@@ -22,7 +22,7 @@ graph TB
         A[React + TailwindCSS]
     end
 
-    subgraph Ingress["NGINX Ingress devops.local"]
+    subgraph Ingress["NGINX Ingress (devops.local)"]
         B[Ingress]
     end
 
@@ -34,12 +34,12 @@ graph TB
         D[Node.js + Express + Socket.IO]
     end
 
-    subgraph Data["Data and APIs"]
-        E[Redis chat]
+    subgraph Data["Data & APIs"]
+        E[Redis (chat)]
         F[Kubernetes API]
     end
 
-    A -->|HTTP| B
+    A -->|HTTP/REST| B
     A -->|WebSocket| B
     B --> C
     B --> D
@@ -217,9 +217,9 @@ socket.on('logs:error', (err) => { /* error info */ })
 
 ## 🎨 Usage Tips
 
-- 🧭 Logs: Switching pod/container is resilient; transient HTTP errors are suppressed during stream changes.
-- ⚖️ Scaling: Merge-patch with fallbacks; works for Deployments, StatefulSets, and ReplicaSets.
-- 🔄 Namespaces: Changing namespace resets pod selection to avoid stale streams.
+- Logs: Switching pod/container is resilient; transient HTTP errors are suppressed during stream changes.
+- Scaling: Merge-patch with fallbacks; works for Deployments, StatefulSets, and ReplicaSets.
+- Namespaces: Changing namespace resets pod selection to avoid stale streams.
 
 ---
 
@@ -252,14 +252,13 @@ sequenceDiagram
     participant BE as Backend
     participant K8s as Kubernetes API
 
-    FE->>WS: streamLogs(ns,pod,container)
+    FE->>WS: streamLogs { ns, pod, container }
     WS->>BE: subscribe(id)
-    BE->>K8s: start pod logs
+    BE->>K8s: stream pod logs
     K8s-->>BE: log lines
     BE-->>WS: logs:line
     WS-->>FE: logs:line (append)
-    Note over FE,BE: On switch: end previous stream
-    Note over FE,BE: Suppress transient errors
+    Note over FE,BE: On switch: end previous stream; suppress transient errors
 ```
 
 ### ⚖️ Scaling (with Fallbacks)

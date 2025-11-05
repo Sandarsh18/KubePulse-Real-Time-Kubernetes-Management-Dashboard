@@ -6,36 +6,25 @@ import PodList from '../components/PodList'
 import Deployments from '../components/Deployments'
 import Events from '../components/Events'
 import { useTheme } from '../context/ThemeContext'
+import { useK8sData } from '../context/K8sDataContext' // ← NEW
 
 export default function Dashboard() {
-  const [ns, setNs] = useState('devops-demo')
+  // ✅ Use shared context data instead of local state
+  const { namespace, setNamespace, pods, deployments, loading } = useK8sData()
   const [selectedPod, setSelectedPod] = useState(null)
-  const [clusterInfo, setClusterInfo] = useState({ nodes: 0, pods: 0, deployments: 0 })
   const { theme } = useTheme()
   const navigate = useNavigate()
 
   useEffect(() => {
-    // Prevent auto-scroll on dashboard
     window.scrollTo(0, 0)
-    
-    // Fetch cluster stats
-    const fetchStats = async () => {
-      try {
-        const podsRes = await axios.get('/api/k8s/pods', { params: { ns } })
-        const depsRes = await axios.get('/api/k8s/deployments', { params: { ns } })
-        setClusterInfo({
-          pods: podsRes.data.length,
-          deployments: depsRes.data.length,
-          nodes: 1 // Can be extended
-        })
-      } catch (e) {
-        console.error('Failed to fetch stats:', e)
-      }
-    }
-    fetchStats()
-    const interval = setInterval(fetchStats, 10000)
-    return () => clearInterval(interval)
-  }, [ns])
+  }, [])
+
+  // ✅ Compute cluster stats from context data
+  const clusterInfo = {
+    pods: pods.length,
+    deployments: deployments.length,
+    nodes: 1
+  }
 
   const handleDeletePod = async (podName) => {
     if (!window.confirm(`⚠️ Are you sure you want to delete pod "${podName}"? This action cannot be undone.`)) {
@@ -43,9 +32,9 @@ export default function Dashboard() {
     }
     
     try {
-      console.log(`Deleting pod ${podName} in namespace ${ns}`)
+      console.log(`Deleting pod ${podName} in namespace ${namespace}`)
       await axios.delete(`/api/k8s/pods/${podName}`, { 
-        params: { ns },
+        params: { ns: namespace },
         timeout: 10000
       })
       alert(`✅ Pod ${podName} deleted successfully. The page will refresh.`)
@@ -63,8 +52,8 @@ export default function Dashboard() {
     }
     
     try {
-      console.log(`Restarting pod ${podName} in namespace ${ns}`)
-      await axios.post(`/api/k8s/pods/${podName}/restart`, { ns }, {
+      console.log(`Restarting pod ${podName} in namespace ${namespace}`)
+      await axios.post(`/api/k8s/pods/${podName}/restart`, { ns: namespace }, {
         timeout: 10000
       })
       alert(`✅ Pod ${podName} restarted successfully. The page will refresh.`)
@@ -135,7 +124,7 @@ export default function Dashboard() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Namespace Selector Card with Enhanced Design */}
+            {/* Namespace Selector Card */}
             <div className={`${theme.card} rounded-xl ${theme.shadow} p-6 border ${theme.border} transition-all duration-300 ${theme.cardHover} transform hover:scale-[1.02]`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -146,24 +135,21 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <h3 className={`text-sm font-medium ${theme.textMuted}`}>Active Namespace</h3>
-                    <p className={`text-lg font-semibold ${theme.text}`}>{ns}</p>
+                    <p className={`text-lg font-semibold ${theme.text}`}>{namespace}</p>
                   </div>
                 </div>
-                <NamespacePicker value={ns} onChange={setNs} />
+                {/* ✅ Updated to use setNamespace from context */}
+                <NamespacePicker value={namespace} onChange={setNamespace} />
               </div>
             </div>
 
-            {/* Pods Section */}
-            <PodList ns={ns} onSelect={setSelectedPod} />
-            
-            {/* Deployments Section */}
-            <Deployments ns={ns} />
-
-            {/* Events Section */}
-            <Events ns={ns} />
+            {/* ✅ Pass data from context instead of letting components fetch */}
+            <PodList onSelect={setSelectedPod} />
+            <Deployments />
+            <Events />
           </div>
 
-          {/* Sidebar with Enhanced Styling */}
+          {/* Sidebar - rest remains the same */}
           <div className="space-y-6">
             {/* Selected Pod Details */}
             <div className={`${theme.card} rounded-xl ${theme.shadow} p-6 border ${theme.border} sticky top-24 transition-all duration-300 ${theme.cardHover}`}>
@@ -222,7 +208,7 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Quick Actions with Working Buttons */}
+            {/* Quick Actions */}
             <div className={`bg-gradient-to-br ${theme.gradient} rounded-xl ${theme.shadow} p-6 text-white transition-all duration-300`}>
               <h3 className="font-semibold mb-4 flex items-center">
                 <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,7 +274,7 @@ export default function Dashboard() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className={`text-sm ${theme.textMuted}`}>Current Namespace:</span>
-                  <span className={`text-sm font-mono ${theme.text}`}>{ns}</span>
+                  <span className={`text-sm font-mono ${theme.text}`}>{namespace}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className={`text-sm ${theme.textMuted}`}>Running Pods:</span>

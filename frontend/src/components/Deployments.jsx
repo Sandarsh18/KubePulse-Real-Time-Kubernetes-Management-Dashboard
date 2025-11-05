@@ -1,26 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import axios from 'axios'
 import { useTheme } from '../context/ThemeContext'
+import { useK8sData } from '../context/K8sDataContext'
 
-export default function Deployments({ ns }) {
-  const [deps, setDeps] = useState([])
-  const [loading, setLoading] = useState(true)
+export default function Deployments() {
+  const { deployments: deps, loading, namespace: ns, refresh } = useK8sData()
   const [scaling, setScaling] = useState({})
   const { theme } = useTheme()
-
-  useEffect(() => {
-    setLoading(true)
-    axios.get('/api/k8s/deployments', { params: { ns }})
-      .then(res => setDeps(res.data))
-      .finally(() => setLoading(false))
-  }, [ns])
 
   const updateReplicas = async (name, replicas) => {
     setScaling(prev => ({ ...prev, [name]: true }))
     try {
       console.log(`Scaling ${name} to ${replicas} replicas in namespace ${ns}`)
       
-      // Make the scale request with proper error handling
       const response = await axios.post('/api/k8s/scale', { 
         ns, 
         name, 
@@ -29,7 +21,7 @@ export default function Deployments({ ns }) {
         headers: {
           'Content-Type': 'application/json'
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 10000
       })
       
       console.log('Scale response:', response.data)
@@ -37,9 +29,8 @@ export default function Deployments({ ns }) {
       // Wait a moment for k8s to update
       await new Promise(resolve => setTimeout(resolve, 1000))
       
-      // Refresh deployments list
-      const { data } = await axios.get('/api/k8s/deployments', { params: { ns }})
-      setDeps(data)
+      // Refresh data from context
+      refresh()
       
       console.log(`✅ Successfully scaled ${name} to ${replicas} replicas`)
     } catch (error) {

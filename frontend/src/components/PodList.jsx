@@ -1,27 +1,9 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
 import { useTheme } from '../context/ThemeContext'
+import { useK8sData } from '../context/K8sDataContext'
 
-export default function PodList({ ns, onSelect }) {
-  const [pods, setPods] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+export default function PodList({ onSelect }) {
+  const { pods, loading, error } = useK8sData()
   const { theme } = useTheme()
-
-  useEffect(() => {
-    let mounted = true
-    setLoading(true)
-    setError(null)
-    axios.get(`/api/k8s/pods`, { params: { ns }})
-      .then(res => {
-        if (mounted) setPods(res.data)
-      })
-      .catch(err => {
-        if (mounted) setError(err.message)
-      })
-      .finally(()=> setLoading(false))
-    return () => { mounted = false }
-  }, [ns])
 
   if (loading) {
     return (
@@ -70,7 +52,7 @@ export default function PodList({ ns, onSelect }) {
             <svg className={`w-16 h-16 ${theme.textMuted} opacity-30 mb-3 animate-bounce-slow`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
-            <p className={theme.textMuted}>No pods found in namespace <span className="font-medium">{ns}</span></p>
+            <p className={theme.textMuted}>No pods found in current namespace</p>
           </div>
         ) : (
           pods.map(p => (
