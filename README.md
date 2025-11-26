@@ -23,6 +23,17 @@
 - 🔌 **Zero-tab context** — Jump from metrics to live logs or pod restart without leaving the panel.
 - 🌈 **Neon UX** — Tailwind + glassmorphism theme with keyboard-friendly workflows.
 
+### Feature Matrix
+
+| Badge | Capability | Notes |
+| --- | --- | --- |
+| 🧊 Status Cards | Animated pod/deployment summaries with gradients | Auto-refresh via React Query polling |
+| 📡 Live Metrics | CPU/memory gauges with history spark bars | Backed by metrics-server, normalized to m/MiB |
+| 📟 Log Tail | Socket.IO terminal with room scoping | Supports container follow + clear | 
+| 🗂️ Namespace Switcher | Scoped API calls per namespace | Filters lists + metrics synchronously |
+| 🛠️ Admin Actions | Restart/Delete pod, scale deployments | Guarded by JWT + role middleware |
+| 🗨️ Team Chat | Real-time thread pinned to dashboard | Persists to MongoDB |
+
 ### Tech Sticker Sheet
 
 | Layer | Tools |
@@ -31,6 +42,13 @@
 | API | Express 🚂 · Socket.IO 🔌 · Mongoose 🍃 |
 | Data | MongoDB 🍃 · Redis 🔴 |
 | Cluster | Kind ⛵ · NGINX 🌀 · Metrics Server 📈 |
+
+### Screens & Stickers
+
+- 🖥️ `frontend/docs/screens/dashboard.png` — Control room cards + pod inspector.
+- 📈 `frontend/docs/screens/logs.png` — Neon terminal with live log tail.
+- 📲 `frontend/docs/screens/mobile.png` — Responsive layout for tablets.
+Add your own screenshots to `frontend/docs/screens/` and reference them here to grow the sticker wall.
 
 ## 🧭 Architecture
 
@@ -91,6 +109,24 @@ sequenceDiagram
 	API->>User: WebSocket tail
 ```
 
+## 🛡️ RBAC & Actions
+
+```mermaid
+flowchart TB
+	Viewer((Viewer)) -->|Observe| Metrics[Dashboards]
+	Viewer --> Logs[Logs]
+	Operator((Operator)) -->|Scale| Deployments
+	Operator --> Metrics
+	Admin((Admin)) -->|Restart/Delete| Pods
+	Admin --> Operator
+```
+
+| Role | Icon | Permissions |
+| --- | --- | --- |
+| Viewer | 👀 | Read-only dashboards, logs, chat |
+| Operator | 🛠️ | Viewer rights + scale deployments |
+| Admin | 🧨 | Operator rights + restart/delete pods, manage users |
+
 ## ⚙️ Deployment Automation
 
 ```mermaid
@@ -107,6 +143,7 @@ flowchart LR
 
 - Single `deploy.sh` script orchestrates cluster creation, builds, secret generation, and ingress publishing.
 - Host port mapping exposes `https://kubepulse.local` (remember to trust the self-signed cert).
+- Stickers to watch for: ✅ logs will say *"Dashboard live"*, ⚠️ indicates a manual step (accept certificate), ❌ stops the script if dependencies missing.
 
 ## 🚀 Getting Started
 
@@ -130,6 +167,7 @@ chmod +x deploy.sh
 1. Accept the self-signed warning when opening `https://kubepulse.local`.
 2. Log in with the bootstrap admin created by the script (`admin@kubepulse.local / Admin123!`).
 3. Use the namespace selector to switch between `kubepulse`, `default`, or `kube-system`.
+4. (Optional) Pin `kubepulse.local` as an app shortcut in Brave/Chrome for a desktop-like feel 🖱️.
 
 ### TLS certificate
 
@@ -149,6 +187,15 @@ Tips:
 - Use VS Code tasks or `npm run dev -- --host` for LAN previews.
 - Tailwind tokens live in `frontend/src/index.css`; extend them instead of hard-coding colors.
 - WebSocket helpers are shared via `frontend/src/hooks/useWebSocket.js`.
+- Need the whole stack locally? Run `npm run dev --workspace frontend` and `npm run dev --workspace backend` in parallel, or use the provided VS Code multi-root `/.vscode/launch.json` template.
+- 🎯 Quick lint fix: `npm run lint -- --fix`.
+
+### CLI Shortcuts
+
+- `kubectl get pods -n kubepulse -w` — Watch workloads as KubePulse updates.
+- `kubectl logs deploy/backend -n kubepulse -f` — Compare WebSocket tail with cluster logs.
+- `kind delete cluster --name kubepulse` — Tear down the lab.
+- `docker stats $(docker ps --format '{{.Names}}' | grep kubepulse)` — Profile container usage.
 
 ## 🛡️ Operational Notes
 
@@ -158,6 +205,8 @@ Tips:
   - Port conflicts on 80/443? Stop host services (nginx, apache) before running Kind.
   - Metrics empty? Confirm `metrics-server` is installed and TLS flags are patched.
   - WebSocket disconnects? Check proxy `Upgrade` headers in `frontend/nginx.conf`.
+- **Backups**: MongoDB PVC retains users/chat; snapshot with `kubectl cp` or external backup.
+- **Scaling**: Increase replicas in `kubernetes/backend-deployment.yaml` + `frontend-deployment.yaml`; HPA coming soon 🧩.
 
 ## 🤝 Contributing
 
