@@ -156,6 +156,7 @@ deploy_manifests() {
     log_info "Deploying Kubernetes manifests..."
     
     kubectl apply -f kubernetes/namespace.yaml
+    kubectl apply -f kubernetes/demo-namespace.yaml
     kubectl apply -f kubernetes/mongodb-deployment.yaml
     kubectl apply -f kubernetes/redis-deployment.yaml
     kubectl apply -f kubernetes/backend-deployment.yaml
@@ -165,15 +166,18 @@ deploy_manifests() {
     
     kubectl apply -f kubernetes/ingress.yaml
     
+    # Deploy demo pods to separate namespace
+    kubectl apply -f kubernetes/demo-pods.yaml
+    
     log_success "Manifests deployed"
 }
 
 # Wait for deployments
 wait_for_deployments() {
-    log_info "Waiting for deployments to be ready..."
+    log_info "Waiting for workloads to be ready..."
     
-    kubectl wait --for=condition=available --timeout=300s \
-        deployment/mongodb -n kubepulse
+    # MongoDB is a StatefulSet now, so wait using rollout status
+    kubectl rollout status statefulset/mongodb -n kubepulse --timeout=300s
     
     kubectl wait --for=condition=available --timeout=300s \
         deployment/redis -n kubepulse
@@ -184,7 +188,7 @@ wait_for_deployments() {
     kubectl wait --for=condition=available --timeout=300s \
         deployment/frontend -n kubepulse
     
-    log_success "All deployments ready"
+    log_success "All workloads ready"
 }
 
 # Create initial admin user

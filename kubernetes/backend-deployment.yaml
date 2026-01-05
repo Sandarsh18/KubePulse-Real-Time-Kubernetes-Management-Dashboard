@@ -13,7 +13,7 @@ rules:
   resources: ["pods", "pods/log", "namespaces", "events", "nodes"]
   verbs: ["get", "list", "watch", "delete"]
 - apiGroups: ["apps"]
-  resources: ["deployments", "deployments/scale"]
+  resources: ["deployments", "deployments/scale", "statefulsets", "statefulsets/scale"]
   verbs: ["get", "list", "watch", "patch", "update"]
 - apiGroups: ["metrics.k8s.io"]
   resources: ["pods", "nodes"]
@@ -39,7 +39,7 @@ metadata:
   namespace: kubepulse
 data:
   PORT: "5000"
-  MONGO_URI: "mongodb://mongodb:27017/kubepulse"
+  MONGO_URI: "mongodb://mongodb-0.mongodb.kubepulse.svc.cluster.local:27017/kubepulse?replicaSet=rs0"
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
 ---

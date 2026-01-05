@@ -8,17 +8,26 @@
 
 ## 📋 Contents
 
-1. [Why KubePulse?](#-why-kubepulse)
-2. [Architecture](#-architecture)
-3. [Telemetry Flow](#-telemetry-flow)
-4. [Deployment Automation](#-deployment-automation)
-5. [Getting Started](#-getting-started)
-6. [Developer Experience](#-developer-experience)
-7. [Operational Notes](#-operational-notes)
+1. [Latest Highlights](#-latest-highlights)
+2. [Why KubePulse?](#-why-kubepulse)
+3. [Architecture](#-architecture)
+4. [Telemetry Flow](#-telemetry-flow)
+5. [Deployment Automation](#-deployment-automation)
+6. [Getting Started](#-getting-started)
+7. [Developer Experience](#-developer-experience)
+8. [Operational Notes](#-operational-notes)
+
+## 🆕 Latest Highlights
+
+- 🧱 **Unified Workloads board** — Deployments and StatefulSets (hello MongoDB!) now appear side-by-side with labels so SREs instantly know what they are scaling.
+- 📈 **Stateful scaling endpoint** — Backend `/api/k8s/scale` accepts the workload `kind`, so the same `+ / -` controls seamlessly resize Mongo replica sets without leaving the UI.
+- 🛡️ **RBAC hardening** — Backend service account includes `statefulsets` + `statefulsets/scale` verbs to avoid 403s when pulling data from production namespaces.
+- 🔄 **Manual refresh booster** — Namespace switcher sports a one-click refresh button that fan-out refetches pods, deployments, and namespace inventory for instant reconciles.
+- 🎨 **Badges & copy** — Glassmorphism board now reads “Workloads” with per-row pills, making it clear you are managing more than just deployments.
 
 ## ✨ Why KubePulse?
 
-- 🛰️ **Radar View** — Real-time cards for pods, deployments, health %, and namespace telemetry.
+- 🛰️ **Radar View** — Real-time cards for pods, deployments, stateful workloads, health %, and namespace telemetry.
 - 💬 **Collab-first** — Chat and RBAC-aware actions (viewer, operator, admin) keep teams aligned.
 - 🔌 **Zero-tab context** — Jump from metrics to live logs or pod restart without leaving the panel.
 - 🌈 **Neon UX** — Tailwind + glassmorphism theme with keyboard-friendly workflows.
@@ -31,7 +40,7 @@
 | 📡 Live Metrics | CPU/memory gauges with history spark bars | Backed by metrics-server, normalized to m/MiB |
 | 📟 Log Tail | Socket.IO terminal with room scoping | Supports container follow + clear | 
 | 🗂️ Namespace Switcher | Scoped API calls per namespace | Filters lists + metrics synchronously |
-| 🛠️ Admin Actions | Restart/Delete pod, scale deployments | Guarded by JWT + role middleware |
+| 🛠️ Admin Actions | Restart/Delete pod, scale deployments/statefulsets | Guarded by JWT + role middleware |
 | 🗨️ Team Chat | Real-time thread pinned to dashboard | Persists to MongoDB |
 
 ### Tech Sticker Sheet
@@ -84,6 +93,7 @@ graph TB
 - **Frontend** serves the neon dashboard and WebSocket client.
 - **Backend** proxies Kubernetes calls, streams logs, and exposes RBAC-safe mutations.
 - **MongoDB/Redis** hold users, sessions, chat, and subscription state.
+- **Mock Pods**: when real namespaces lack Pending/Failed/Succeeded pods, the backend adds a lightweight mock set so dashboards showcase every state. Admins can flip mock pod states via `/api/k8s/pods/:name/mock-status` to simulate recoveries.
 
 ## 🔁 Telemetry Flow
 
@@ -144,6 +154,7 @@ flowchart LR
 - Single `deploy.sh` script orchestrates cluster creation, builds, secret generation, and ingress publishing.
 - Host port mapping exposes `https://kubepulse.local` (remember to trust the self-signed cert).
 - Stickers to watch for: ✅ logs will say *"Dashboard live"*, ⚠️ indicates a manual step (accept certificate), ❌ stops the script if dependencies missing.
+- Refresh UX: the namespace switcher section now includes a spinner-enabled **Refresh data** button that triggers React Query refetches for pods/deployments/namespaces instantly.
 
 ## 🚀 Getting Started
 
@@ -187,6 +198,7 @@ Tips:
 - Use VS Code tasks or `npm run dev -- --host` for LAN previews.
 - Tailwind tokens live in `frontend/src/index.css`; extend them instead of hard-coding colors.
 - WebSocket helpers are shared via `frontend/src/hooks/useWebSocket.js`.
+- Workload scaling hits `/api/k8s/scale` with `{ deployment, ns, replicas, kind }`; send `kind: "StatefulSet"` when scripting MongoDB/Redis clusters.
 - Need the whole stack locally? Run `npm run dev --workspace frontend` and `npm run dev --workspace backend` in parallel, or use the provided VS Code multi-root `/.vscode/launch.json` template.
 - 🎯 Quick lint fix: `npm run lint -- --fix`.
 
@@ -200,6 +212,7 @@ Tips:
 ## 🛡️ Operational Notes
 
 - **RBAC**: viewers can monitor, operators can scale, admins can restart/delete pods.
+- **Cluster permissions**: the backend ServiceAccount (`kubepulse-backend`) now requests `statefulsets` and `statefulsets/scale` verbs so MongoDB or other replica sets show up in the workloads board. Grant the same verbs in production clusters before deploying.
 - **Logs**: `/logs` leverages Socket.IO rooms; ensure ingress websockets are enabled.
 - **Troubleshooting**:
   - Port conflicts on 80/443? Stop host services (nginx, apache) before running Kind.

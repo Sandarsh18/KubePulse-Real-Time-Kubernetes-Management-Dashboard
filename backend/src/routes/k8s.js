@@ -28,20 +28,49 @@ router.get('/pods', protect, async (req, res) => {
     const ns = req.query.ns || 'default';
     try {
         const response = await k8sApi.listNamespacedPod(ns);
-        const pods = response.body.items.map(pod => ({
-            name: pod.metadata.name,
-            namespace: pod.metadata.namespace,
-            status: pod.status.phase,
-            ip: pod.status.podIP,
-            node: pod.spec.nodeName,
-            startTime: pod.status.startTime,
-            containers: pod.spec.containers.map(c => ({
-                name: c.name,
-                image: c.image,
-                ready: pod.status.containerStatuses?.find(cs => cs.name === c.name)?.ready || false,
-                resources: c.resources || {}
-            }))
-        }));
+        const pods = response.body.items.map(pod => {
+            // Determine actual pod status including CrashLoopBackOff, Error, etc.
+            let actualStatus = pod.status.phase;
+            
+            // Check container statuses for more accurate status
+            if (pod.status.containerStatuses && pod.status.containerStatuses.length > 0) {
+                for (const containerStatus of pod.status.containerStatuses) {
+                    // Check waiting state (CrashLoopBackOff, ImagePullBackOff, etc.)
+                    if (containerStatus.state?.waiting) {
+                        actualStatus = containerStatus.state.waiting.reason || actualStatus;
+                        break;
+                    }
+                    // Check terminated state
+                    if (containerStatus.state?.terminated) {
+                        if (containerStatus.state.terminated.reason === 'Error' || 
+                            containerStatus.state.terminated.exitCode !== 0) {
+                            actualStatus = 'Failed';
+                            break;
+                        }
+                    }
+                    // If container is not ready and running, might be failing
+                    if (!containerStatus.ready && containerStatus.state?.running && 
+                        containerStatus.restartCount > 0) {
+                        actualStatus = 'CrashLoopBackOff';
+                    }
+                }
+            }
+            
+            return {
+                name: pod.metadata.name,
+                namespace: pod.metadata.namespace,
+                status: actualStatus,
+                ip: pod.status.podIP,
+                node: pod.spec.nodeName,
+                startTime: pod.status.startTime,
+                containers: pod.spec.containers.map(c => ({
+                    name: c.name,
+                    image: c.image,
+                    ready: pod.status.containerStatuses?.find(cs => cs.name === c.name)?.ready || false,
+                    resources: c.resources || {}
+                }))
+            };
+        });
         res.json(pods);
     } catch (err) {
         handleK8sError(err, res);
@@ -52,16 +81,32 @@ router.get('/pods', protect, async (req, res) => {
 router.get('/deployments', protect, async (req, res) => {
     const ns = req.query.ns || 'default';
     try {
-        const response = await k8sAppsApi.listNamespacedDeployment(ns);
-        const deployments = response.body.items.map(dep => ({
-            name: dep.metadata.name,
-            namespace: dep.metadata.namespace,
-            replicas: dep.spec.replicas,
-            availableReplicas: dep.status.availableReplicas || 0,
-            readyReplicas: dep.status.readyReplicas || 0,
-            creationTimestamp: dep.metadata.creationTimestamp
-        }));
-        res.json(deployments);
+        const toWorkload = (item, kind) => ({
+            name: item.metadata.name,
+            namespace: item.metadata.namespace,
+            replicas: item.spec.replicas,
+            availableReplicas: item.status?.availableReplicas || 0,
+            readyReplicas: item.status?.readyReplicas || 0,
+            creationTimestamp: item.metadata.creationTimestamp,
+            kind
+        });
+
+        const deploymentResp = await k8sAppsApi.listNamespacedDeployment(ns);
+        const deployments = deploymentResp.body.items.map(dep => toWorkload(dep, 'Deployment'));
+
+        let statefulsets = [];
+        try {
+            const statefulResp = await k8sAppsApi.listNamespacedStatefulSet(ns);
+            statefulsets = statefulResp.body.items.map(sts => toWorkload(sts, 'StatefulSet'));
+        } catch (statefulErr) {
+            if (statefulErr.statusCode === 403) {
+                console.warn('Skipping StatefulSet listing due to RBAC restrictions');
+            } else {
+                throw statefulErr;
+            }
+        }
+
+        res.json([...deployments, ...statefulsets]);
     } catch (err) {
         handleK8sError(err, res);
     }
@@ -116,7 +161,7 @@ router.get('/metrics', protect, async (req, res) => {
 
 // POST /api/k8s/scale (Admin only)
 router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) => {
-    const { deployment, ns, replicas } = req.body;
+    const { deployment, ns, replicas, kind = 'Deployment' } = req.body;
     try {
         const desiredReplicas = Math.max(0, parseInt(replicas, 10) || 0);
         const patchBody = { spec: { replicas: desiredReplicas } };
@@ -134,12 +179,28 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
 
         let scaled = false;
 
+        const resourceKind = kind === 'StatefulSet' ? 'StatefulSet' : 'Deployment';
+
         const logScaleFailure = (stage, error) => {
-            console.warn(`[Scale] ${stage} failed (${error.statusCode || 'no-status'}):`, error.body?.message || error.message || error);
+            console.warn(`[Scale:${resourceKind}] ${stage} failed (${error.statusCode || 'no-status'}):`, error.body?.message || error.message || error);
         };
 
+        const scaleApi = resourceKind === 'StatefulSet'
+            ? {
+                read: (name, namespace) => k8sAppsApi.readNamespacedStatefulSetScale(name, namespace),
+                replace: (name, namespace, body) => k8sAppsApi.replaceNamespacedStatefulSetScale(name, namespace, body),
+                patchScale: (name, namespace, body, options) => k8sAppsApi.patchNamespacedStatefulSetScale(name, namespace, body, undefined, undefined, undefined, undefined, options),
+                patchResource: (name, namespace, body, options) => k8sAppsApi.patchNamespacedStatefulSet(name, namespace, body, undefined, undefined, undefined, undefined, options)
+            }
+            : {
+                read: (name, namespace) => k8sAppsApi.readNamespacedDeploymentScale(name, namespace),
+                replace: (name, namespace, body) => k8sAppsApi.replaceNamespacedDeploymentScale(name, namespace, body),
+                patchScale: (name, namespace, body, options) => k8sAppsApi.patchNamespacedDeploymentScale(name, namespace, body, undefined, undefined, undefined, undefined, options),
+                patchResource: (name, namespace, body, options) => k8sAppsApi.patchNamespacedDeployment(name, namespace, body, undefined, undefined, undefined, undefined, options)
+            };
+
         try {
-            const scaleResource = await k8sAppsApi.readNamespacedDeploymentScale(deployment, ns);
+            const scaleResource = await scaleApi.read(deployment, ns);
             const updatedScale = {
                 ...scaleResource.body,
                 spec: {
@@ -147,11 +208,7 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
                     replicas: desiredReplicas
                 }
             };
-            await k8sAppsApi.replaceNamespacedDeploymentScale(
-                deployment,
-                ns,
-                updatedScale
-            );
+            await scaleApi.replace(deployment, ns, updatedScale);
             scaled = true;
         } catch (error) {
             logScaleFailure('replace scale resource', error);
@@ -172,14 +229,10 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
         if (!scaled) {
             await tryPatch(
                 'json patch scale subresource',
-                (body, options) => k8sAppsApi.patchNamespacedDeploymentScale(
+                (body, options) => scaleApi.patchScale(
                     deployment,
                     ns,
                     body,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
                     options
                 ),
                 jsonPatch,
@@ -190,14 +243,10 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
         if (!scaled) {
             await tryPatch(
                 'merge patch scale subresource',
-                (body, options) => k8sAppsApi.patchNamespacedDeploymentScale(
+                (body, options) => scaleApi.patchScale(
                     deployment,
                     ns,
                     body,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
                     options
                 ),
                 patchBody,
@@ -207,15 +256,11 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
 
         if (!scaled) {
             await tryPatch(
-                'strategic patch deployment',
-                (body, options) => k8sAppsApi.patchNamespacedDeployment(
+                resourceKind === 'StatefulSet' ? 'strategic patch statefulset' : 'strategic patch deployment',
+                (body, options) => scaleApi.patchResource(
                     deployment,
                     ns,
                     body,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
                     options
                 ),
                 patchBody,
@@ -224,9 +269,9 @@ router.post('/scale', protect, authorize('admin', 'operator'), async (req, res) 
         }
 
         if (!scaled) {
-            throw new Error('Unable to scale deployment due to Kubernetes API restrictions');
+            throw new Error(`Unable to scale ${resourceKind} due to Kubernetes API restrictions`);
         }
-        res.json({ message: `Scaled ${deployment} to ${replicas} replicas` });
+        res.json({ message: `Scaled ${resourceKind} ${deployment} to ${replicas} replicas` });
     } catch (err) {
         handleK8sError(err, res);
     }

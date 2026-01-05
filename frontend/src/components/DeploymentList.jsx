@@ -10,8 +10,8 @@ const DeploymentList = ({ deployments, namespace }) => {
     const queryClient = useQueryClient();
 
     const scaleMutation = useMutation({
-        mutationFn: async ({ deployment, replicas }) => {
-            await api.post('/k8s/scale', { deployment, ns: namespace, replicas });
+        mutationFn: async ({ deployment, replicas, kind }) => {
+            await api.post('/k8s/scale', { deployment, ns: namespace, replicas, kind });
         },
         onSuccess: () => {
             queryClient.invalidateQueries(['deployments', namespace]);
@@ -21,7 +21,7 @@ const DeploymentList = ({ deployments, namespace }) => {
 
     const handleScale = (dep, change) => {
         const newReplicas = Math.max(0, dep.replicas + change);
-        scaleMutation.mutate({ deployment: dep.name, replicas: newReplicas });
+        scaleMutation.mutate({ deployment: dep.name, replicas: newReplicas, kind: dep.kind });
     };
 
     const formatAge = (timestamp) => {
@@ -37,13 +37,13 @@ const DeploymentList = ({ deployments, namespace }) => {
     };
 
     return (
-        <div className="glass-panel flex h-full flex-col rounded-2xl">
+        <div className="glass-panel flex flex-col rounded-2xl">
             <div className="border-b border-theme bg-surface-soft p-4">
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-color)]">
                             <Layers size={18} className="text-neon-pink" />
-                            Deployments
+                            Workloads
                         </div>
                         <p className="text-xs text-muted">Scale workloads without leaving the dashboard</p>
                     </div>
@@ -53,11 +53,12 @@ const DeploymentList = ({ deployments, namespace }) => {
                 </div>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            <div className="space-y-3 p-3">
                 <AnimatePresence initial={false}>
                     {deployments.map((dep) => {
                     const readiness = dep.replicas === 0 ? 0 : (dep.readyReplicas / dep.replicas) * 100;
                     const healthy = readiness >= 90;
+                    const kindLabel = dep.kind || 'Deployment';
                     return (
                             <motion.div
                                 key={dep.name}
@@ -71,6 +72,7 @@ const DeploymentList = ({ deployments, namespace }) => {
                             <div className="mb-4 flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                         <p className="truncate text-sm font-semibold text-[var(--text-color)]" title={dep.name}>{dep.name}</p>
+                                        <span className="mt-1 inline-flex items-center rounded-full border border-theme bg-surface-soft px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted">{kindLabel}</span>
                                         <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted">
                                         <span className="inline-flex items-center gap-1"><Timer size={12} />Age {formatAge(dep.creationTimestamp)}</span>
                                         <span className="inline-flex items-center gap-1">
@@ -127,7 +129,7 @@ const DeploymentList = ({ deployments, namespace }) => {
 
                 {deployments.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-theme p-8 text-center text-sm text-muted">
-                        No deployments found
+                        No workloads found
                     </div>
                 )}
             </div>
