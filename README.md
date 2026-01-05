@@ -21,9 +21,9 @@
 [![Socket.io](https://img.shields.io/badge/Socket.io-4.5-010101?style=for-the-badge&logo=socket.io&logoColor=white)](https://socket.io/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
-![Stars](https://img.shields.io/github/stars/Sandarsh18/KubePulse?style=social)
-![Forks](https://img.shields.io/github/forks/Sandarsh18/KubePulse?style=social)
-![Issues](https://img.shields.io/github/issues/Sandarsh18/KubePulse?style=social)
+![Stars](https://img.shields.io/github/stars/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=social)
+![Forks](https://img.shields.io/github/forks/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=social)
+![Issues](https://img.shields.io/github/issues/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=social)
 
 ---
 
@@ -1471,7 +1471,7 @@ kubectl set env deployment/backend -n kubepulse LOG_LEVEL=info
 
 If you're still stuck:
 
-1. 📝 Check the [GitHub Issues](https://github.com/Sandarsh18/KubePulse/issues)
+1. 📝 Check the [GitHub Issues](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/issues)
 2. 💬 Join our [Discord Community](https://discord.gg/kubepulse)
 3. 📧 Email support: support@kubepulse.io
 4. 📖 Read the [Full Documentation](https://docs.kubepulse.io)
@@ -1486,9 +1486,9 @@ If you're still stuck:
 
 Help us make KubePulse even better! Whether it's bug fixes, new features, or documentation improvements, all contributions are welcome! 🎉
 
-[![Contributors](https://img.shields.io/github/contributors/Sandarsh18/KubePulse?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse/graphs/contributors)
-[![Pull Requests](https://img.shields.io/github/issues-pr/Sandarsh18/KubePulse?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse/pulls)
-[![Issues](https://img.shields.io/github/issues/Sandarsh18/KubePulse?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse/issues)
+[![Contributors](https://img.shields.io/github/contributors/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/graphs/contributors)
+[![Pull Requests](https://img.shields.io/github/issues-pr/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/pulls)
+[![Issues](https://img.shields.io/github/issues/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=for-the-badge)](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/issues)
 
 </div>
 
@@ -1524,11 +1524,11 @@ graph TD
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/KubePulse.git
-cd KubePulse
+git clone https://github.com/YOUR_USERNAME/KubePulse-Real-Time-Kubernetes-Management-Dashboard.git
+cd KubePulse-Real-Time-Kubernetes-Management-Dashboard
 
 # Add upstream remote
-git remote add upstream https://github.com/Sandarsh18/KubePulse.git
+git remote add upstream https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard.git
 ```
 
 #### 2️⃣ Create a Branch
@@ -1625,7 +1625,7 @@ Before submitting, ensure:
 
 Special thanks to all our amazing contributors! 🎉
 
-[![Contributors](https://contrib.rocks/image?repo=Sandarsh18/KubePulse)](https://github.com/Sandarsh18/KubePulse/graphs/contributors)
+[![Contributors](https://contrib.rocks/image?repo=Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard)](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/graphs/contributors)
 
 </div>
 
@@ -1646,7 +1646,7 @@ Not sure where to start? Here are some ideas:
 
 ### 🐛 Reporting Bugs
 
-Found a bug? Please [open an issue](https://github.com/Sandarsh18/KubePulse/issues/new) with:
+Found a bug? Please [open an issue](https://github.com/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard/issues/new) with:
 
 - 🖥️ Environment details (OS, K8s version, browser)
 - 📝 Steps to reproduce
@@ -1733,16 +1733,16 @@ Special thanks to:
 
 ## 🌟 Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Sandarsh18/KubePulse&type=Date)](https://star-history.com/#Sandarsh18/KubePulse&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard&type=Date)](https://star-history.com/#Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard&Date)
 
 ---
 
 ### 📊 Project Stats
 
-![GitHub code size](https://img.shields.io/github/languages/code-size/Sandarsh18/KubePulse?style=flat-square)
-![GitHub repo size](https://img.shields.io/github/repo-size/Sandarsh18/KubePulse?style=flat-square)
-![Lines of code](https://img.shields.io/tokei/lines/github/Sandarsh18/KubePulse?style=flat-square)
-![GitHub last commit](https://img.shields.io/github/last-commit/Sandarsh18/KubePulse?style=flat-square)
+![GitHub code size](https://img.shields.io/github/languages/code-size/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=flat-square)
+![GitHub repo size](https://img.shields.io/github/repo-size/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=flat-square)
+![Lines of code](https://img.shields.io/tokei/lines/github/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=flat-square)
+![GitHub last commit](https://img.shields.io/github/last-commit/Sandarsh18/KubePulse-Real-Time-Kubernetes-Management-Dashboard?style=flat-square)
 
 ---
 
